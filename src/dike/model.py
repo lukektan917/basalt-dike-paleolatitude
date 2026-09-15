@@ -1,0 +1,334 @@
+"""Forward model for the magnetic anomaly over a two-dimensional dike.
+
+The dike is idealised as an infinitely long, vertically-sided tabular body of
+half-width ``half_width``, buried at depth ``depth`` below the sensor, carrying a
+uniform magnetisation of intensity ``intensity`` whose direction makes an angle
+``inclination`` with the horizontal in the plane of the profile.
+
+For such a body the vertical component of the anomalous field along a profile
+running perpendicular to strike has the closed form used in ``bz_dike`` below
+(see e.g. Telford, Geldart & Sheriff, *Applied Geophysics*, 2nd ed., ch. 3).
+Two terms carry the signature that lets us recover the magnetisation direction:
+
+* a pair of **arctangent** terms, *symmetric* about the dike centre, scaled by
+  ``sin(inclination)``. A vertically magnetised dike produces a symmetric peak.
+* a **logarithmic** term, *antisymmetric* about the centre, scaled by
+  ``cos(inclination)``. A horizontally magnetised dike produces a profile that
+  rises on one flank and falls on the other.
+
+The ratio of the symmetric to the antisymmetric part of an observed profile is
+therefore what constrains the inclination, and that is the quantity the whole
+analysis exists to estimate.
+
+**On the baseline term.** A magnetometer transect does not measure the anomaly;
+it measures the anomaly sitting on top of the ambient regional field plus
+whatever constant the instrument contributes. The dike formula alone has no
+constant term, so if the data are handed to it with the wrong DC level the fit
+cannot absorb the error in a baseline — it absorbs it by tilting the balance
+between the symmetric and antisymmetric terms, which is to say *by biasing the
+inclination*, which is the one number the analysis is trying to recover. On
+synthetic transects with a known answer, fitting without a baseline term
+recovers 61.7 degrees where the truth is 68.0; fitting with one recovers 67.5.
+``baseline`` is therefore a fitted parameter here, and the alignment step in
+:mod:`dike.align` only has to get the runs approximately onto a common level
+rather than exactly onto the right one.
+
+**On identifiability.** Written naively the parameterisation is degenerate:
+negating ``half_width`` or ``depth``, or flipping the sign of ``intensity``, can
+each be absorbed by moving ``inclination`` by 180 degrees, so an unconstrained
+least-squares fit will happily wander into a mirror solution that fits equally
+well and means nothing. :func:`fit_dike` therefore fits under bounds that keep
+the geometry physical (positive depth, positive half-width, positive intensity,
+inclination in [-90, 90]), which makes the remaining map one-to-one. This is
+the single most important difference between this implementation and a direct
+transcription of the exploratory notebook, which relied on a hand-tuned starting
+guess to stay in the right basin.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+from scipy.optimize import curve_fit
+
+__all__ = [
+    "bz_dike",
+    "initial_guess",
+    "default_bounds",
+    "RESTART_INCLINATIONS",
+    "DikeFit",
+    "fit_dike",
+    "r_squared",
+    "paleolatitude_from_inclination",
+    "inclination_from_paleolatitude",
+]
+
+
+def bz_dike(
+    x: np.ndarray,
+    offset: float,
+    depth: float,
+    half_width: float,
+    inclination: float,
+    intensity: float,
+    baseline: float = 0.0,
+) -> np.ndarray:
+    """Vertical field anomaly over a 2-D dike, plus a constant baseline.
+
+    Parameters
+    ----------
+    x
+        Position along the profile, in metres.
+    offset
+        Position of the dike centre along the profile, in metres. Fitted rather
+        than assumed, because the operator does not know where the dike is when
+        the transect starts.
+    depth
+        Sensor height above the top of the dike, in metres.
+    half_width
+        Half-width of the dike, in metres.
+    inclination
+        Angle of the magnetisation vector from horizontal, in **degrees**.
+    intensity
+        Magnetisation intensity, in the units of the input field (here uT).
+    baseline
+        Constant background level, in the units of the input field. Defaults to
+        zero so the pure anomaly can be evaluated, but it is a *fitted*
+        parameter in :func:`fit_dike` — see the module docstring for why that
+        matters.
+
+    Returns
+    -------
+    numpy.ndarray
+        Modelled vertical field anomaly at each ``x``.
+
+    Notes
+    -----
+    ``depth`` is constrained to be non-zero by the geometry; the logarithm and
+    the arctangents are both singular for a sensor sitting exactly on an
+    infinitely thin source. Fits are started away from zero for that reason.
+    """
+    x = np.asarray(x, dtype=float)
+    xs = x - offset
+    phi = np.deg2rad(inclination)
+
+    symmetric = np.cos(phi) * np.log(
+        ((xs - half_width) ** 2 + depth**2) / ((xs + half_width) ** 2 + depth**2)
+    )
+    antisymmetric = np.sin(phi) * (
+        np.arctan((xs + half_width) / depth) - np.arctan((xs - half_width) / depth)
+    )
+
+    return 2.0 * intensity * (symmetric + antisymmetric) + baseline
+
+
+def r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
+    """Coefficient of determination for a fit.
+
+    Reported for orientation only. The observations along a transect are
+    strongly autocorrelated (see :mod:`dike.bootstrap`), so R-squared here
+    should not be read as evidence about parameter uncertainty.
+    """
+    observed = np.asarray(observed, dtype=float)
+    predicted = np.asarray(predicted, dtype=float)
+    ss_res = float(np.sum((observed - predicted) ** 2))
+    ss_tot = float(np.sum((observed - observed.mean()) ** 2))
+    if ss_tot == 0.0:
+        return float("nan")
+    return 1.0 - ss_res / ss_tot
+
+
+@dataclass(frozen=True)
+class DikeFit:
+    """Result of fitting :func:`bz_dike` to a profile."""
+
+    offset: float
+    depth: float
+    half_width: float
+    inclination: float
+    intensity: float
+    baseline: float
+    covariance: np.ndarray
+    r2: float
+
+    @property
+    def params(self) -> np.ndarray:
+        """Parameters as the positional array ``bz_dike`` expects."""
+        return np.array(
+            [
+                self.offset,
+                self.depth,
+                self.half_width,
+                self.inclination,
+                self.intensity,
+                self.baseline,
+            ]
+        )
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        return bz_dike(x, *self.params)
+
+    @property
+    def paleolatitude(self) -> float:
+        """Paleolatitude implied by the fitted inclination, in degrees."""
+        return paleolatitude_from_inclination(self.inclination)
+
+    def __str__(self) -> str:  # pragma: no cover - presentation only
+        return (
+            f"offset      = {self.offset:+.4f} m\n"
+            f"depth       = {self.depth:.4f} m\n"
+            f"half_width  = {self.half_width:.4f} m\n"
+            f"inclination = {self.inclination:.2f} deg\n"
+            f"intensity   = {self.intensity:.4f}\n"
+            f"baseline    = {self.baseline:+.4f}\n"
+            f"R^2         = {self.r2:.3f}\n"
+            f"paleolat.   = {self.paleolatitude:.2f} deg"
+        )
+
+
+def initial_guess(
+    x: np.ndarray, y: np.ndarray
+) -> tuple[float, float, float, float, float, float]:
+    """A starting guess read off the data rather than hard-coded.
+
+    The dike centre is taken to be where the profile is most extreme relative to
+    its flanks; width and depth start at values typical of a hand-held survey
+    over a metre-scale outcrop; the magnetisation starts steep, which is the
+    expectation for a mid-latitude intrusion.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    order = np.argsort(x)
+    xs, ys = x[order], y[order]
+    flank = 0.5 * (ys[: max(1, len(ys) // 10)].mean() + ys[-max(1, len(ys) // 10) :].mean())
+    centre = float(xs[np.argmax(np.abs(ys - flank))])
+
+    span = float(xs[-1] - xs[0])
+    return (
+        centre,
+        0.03,
+        max(0.05 * span, 0.05),
+        75.0,
+        max(np.ptp(ys) / 4.0, 1e-3),
+        float(flank),
+    )
+
+
+def default_bounds(x: np.ndarray) -> tuple[list[float], list[float]]:
+    """Bounds that keep the fitted geometry physical and the model identifiable."""
+    x = np.asarray(x, dtype=float)
+    span = float(x.max() - x.min())
+    return (
+        [float(x.min()) - span, 1e-4, 1e-3, -90.0, 0.0, -np.inf],
+        [float(x.max()) + span, 2.0, 2.0, 90.0, np.inf, np.inf],
+    )
+
+
+#: Starting inclinations tried by the multi-start fit. The objective surface has
+#: more than one local minimum, and which one a single start falls into depends
+#: on the initial inclination more than on anything else.
+RESTART_INCLINATIONS = (15.0, 45.0, 70.0, 88.0)
+
+
+def fit_dike(
+    x: np.ndarray,
+    y: np.ndarray,
+    p0: tuple[float, ...] | None = None,
+    bounds: tuple[list[float], list[float]] | None = None,
+    max_nfev: int = 20000,
+    restarts: bool = True,
+) -> DikeFit:
+    """Bounded, multi-start least-squares fit of :func:`bz_dike` to a profile.
+
+    ``p0`` defaults to :func:`initial_guess` and ``bounds`` to
+    :func:`default_bounds`.
+
+    With ``restarts`` the fit is repeated from several starting inclinations and
+    the best-fitting result is kept. This is not defensive padding: the
+    objective has multiple local minima, and a single start from a hand-chosen
+    guess — the original notebook's approach — can settle in one where the dike
+    is a metre wide and the inclination is meaningless, while still reporting a
+    respectable R-squared.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    if bounds is None:
+        bounds = default_bounds(x)
+    lower, upper = bounds
+
+    default_start = initial_guess(x, y)
+    candidates: list[tuple[float, ...]] = []
+    if p0 is not None:
+        candidates.append(tuple(p0))
+    candidates.append(default_start)
+    if restarts:
+        for inclination in RESTART_INCLINATIONS:
+            start = list(default_start)
+            start[3] = inclination
+            candidates.append(tuple(start))
+
+    best: tuple[np.ndarray, np.ndarray] | None = None
+    best_sse = np.inf
+    failures: list[Exception] = []
+
+    for candidate in candidates:
+        start = np.clip(np.asarray(candidate, dtype=float), lower, upper)
+        try:
+            params, cov = curve_fit(
+                bz_dike, x, y, p0=start, bounds=bounds, max_nfev=max_nfev
+            )
+        except (RuntimeError, ValueError) as exc:  # pragma: no cover - rare
+            failures.append(exc)
+            continue
+        sse = float(np.sum((y - bz_dike(x, *params)) ** 2))
+        if sse < best_sse:
+            best_sse, best = sse, (params, cov)
+
+    if best is None:
+        raise RuntimeError(f"every start failed to converge; last error: {failures[-1]}")
+
+    params, cov = best
+    fitted = bz_dike(x, *params)
+
+    return DikeFit(
+        offset=float(params[0]),
+        depth=float(params[1]),
+        half_width=float(params[2]),
+        inclination=float(params[3]),
+        intensity=float(params[4]),
+        baseline=float(params[5]),
+        covariance=np.asarray(cov),
+        r2=r_squared(y, fitted),
+    )
+
+
+def paleolatitude_from_inclination(inclination: float | np.ndarray) -> float | np.ndarray:
+    """Paleolatitude from magnetic inclination, in degrees.
+
+    Uses the geocentric axial dipole (GAD) relation ``tan(I) = 2 tan(lambda)``,
+    the standard assumption of paleomagnetism: averaged over enough time, the
+    geomagnetic field looks like a dipole aligned with the spin axis, so the
+    inclination recorded by a rock fixes the latitude at which it cooled.
+
+    Caveats worth stating plainly, because they bound what this repository can
+    claim:
+
+    * A single dike records an instant, not a time average. Secular variation
+      is not averaged out, so the GAD assumption is weaker here than it would
+      be for a sequence of flows.
+    * The relation is insensitive to the sign convention of the hemisphere; a
+      magnitude is what is recovered.
+    """
+    inclination = np.asarray(inclination, dtype=float)
+    result = np.rad2deg(np.arctan(np.tan(np.deg2rad(inclination)) / 2.0))
+    return float(result) if result.ndim == 0 else result
+
+
+def inclination_from_paleolatitude(latitude: float | np.ndarray) -> float | np.ndarray:
+    """Inverse of :func:`paleolatitude_from_inclination`."""
+    latitude = np.asarray(latitude, dtype=float)
+    result = np.rad2deg(np.arctan(2.0 * np.tan(np.deg2rad(latitude))))
+    return float(result) if result.ndim == 0 else result
