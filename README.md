@@ -1,156 +1,157 @@
 # Paleolatitude of a basalt dike from a phone magnetometer
 
-**Where on Earth was Massachusetts when this rock cooled?**
+**Where on Earth was this rock when it cooled?**
 
 A basalt dike in the Middlesex Fells, north of Boston, was intruded as molten
-rock and then froze. As it cooled through the Curie temperature its magnetic
-minerals locked in the direction of the Earth's field at that moment. That
-direction is still there, and the steepness of it — the *inclination* — is a
-record of latitude: the field is horizontal at the equator and vertical at the
-poles.
+rock and then froze. On the way through the Curie temperature its magnetic
+minerals locked in the direction of the Earth's field at that moment. The
+steepness of that direction — the *inclination* — records latitude: the field
+lies flat at the equator and points straight down at the pole.
 
-This repository recovers that inclination from ten transects walked across the
-dike with a phone magnetometer, and converts it into a paleolatitude with an
-uncertainty that takes the structure of the measurement error seriously.
+This repository recovers that angle from ten transects walked across the dike
+with a phone magnetometer, and turns it into a paleolatitude with an uncertainty
+that respects how the measurement was actually made.
 
 ![Pooled transects and the fitted dike model](figures/04-fit.png)
+
+## Result
+
+| | |
+|---|---|
+| Magnetic inclination | **77.9°** (95% CI 69.8 – 85.2°) |
+| Paleolatitude | **66.8°** (95% CI 53.6 – 80.4°) |
+| Dike half-width | 0.229 m |
+| Sensor height above the dike | 0.026 m |
+| R² | 0.935 |
+
+Reported as magnitudes. The sign of the inclination — and so which hemisphere
+the dike cooled in — depends on the sensor's z-axis convention, which these
+files do not record; see [Caveats](#caveats).
 
 ## The measurement
 
 Ten traverses, each 0.8 m long, perpendicular to the strike of the dike, walked
-to a metronome so that time maps linearly onto distance. The phone records the
-three components of the field at 100 Hz; only the vertical component `Bz` is
-used here.
+to a metronome at 120 bpm so that time maps linearly onto distance. The phone
+records the three field components at 100 Hz; the vertical component `Bz` is the
+one modelled here.
 
 Ten runs rather than one because a single pass over a rock with a hand-held
-sensor is not a measurement — it is an anecdote. The repeats are what make it
-possible to say anything about uncertainty at all.
+sensor is not a measurement — it is an anecdote.
 
 ## The method
 
-**1. Time to distance.** Elapsed time is mapped linearly onto the 0.8 m
-transect. (`dike.io`)
+**1. Time to distance.** Elapsed time is mapped linearly onto the traverse.
 
 **2. Crop and align.** The ends of each run are contaminated by starting and
-stopping, so they are trimmed. Each run also carries its own unknown DC offset —
-the ambient regional field plus the phone's own hard-iron contribution — so the
-runs are shifted onto a common level, anchored at the midpoint, where the
-metronome beat makes position best known across runs. (`dike.align`)
+stopping, so they are trimmed to 0.15–0.70 m. Each run also carries its own
+unknown DC offset, so the runs are shifted onto a common level, anchored at the
+midpoint where the metronome beat makes position best known across runs.
 
 **3. Fit the dike model.** The vertical anomaly over a two-dimensional dike has
-a closed form with two parts: a symmetric pair of arctangent terms scaled by
-`sin(inclination)`, and an antisymmetric logarithmic term scaled by
-`cos(inclination)`. The balance between the symmetric and antisymmetric shape of
-the observed profile is what fixes the inclination. (`dike.model`)
+a closed form: a *symmetric* pair of arctangent terms scaled by `sin(φ)`, and an
+*antisymmetric* logarithmic term scaled by `cos(φ)`. The balance between the
+symmetric and antisymmetric shape of the observed profile is what fixes the
+inclination.
 
-**4. Model the residuals.** The residuals from the fit are not noise — they are
-smooth, wandering excursions, because consecutive samples are a hundredth of a
-second and a few millimetres apart. An AR(1) model fitted to the pooled
-residuals returns a coefficient of about 0.99. (`dike.bootstrap`)
+**4. Model the residuals.** The residuals are not noise — they wander in long
+smooth excursions, because consecutive samples are a hundredth of a second and a
+few millimetres apart. An AR(1) model fitted to them returns a coefficient of
+0.993.
 
 ![Residuals](figures/05-residuals.png)
 
-**5. Bootstrap the uncertainty.** With correlation that strong, the effective
-sample size is a small fraction of the nominal one. `curve_fit` reports a
-standard error of 0.14° on the inclination; the bootstrap below puts it nearer
-3°, so the naive number is optimistic by a factor of roughly forty. Instead,
-2000 synthetic profiles are generated from the fitted model plus simulated AR(1)
-residuals, each is refitted, and the spread of the refitted inclinations is the
-uncertainty. That interval is then carried through the dipole equation
-`tan(I) = 2 tan(λ)` to a paleolatitude.
+**5. Bootstrap the uncertainty.** With correlation that strong, `curve_fit`'s
+standard error of 0.21° on the inclination is not believable — it assumes
+thousands of independent observations when the effective number is far smaller.
+Instead, 2000 synthetic profiles are built from the fitted model plus simulated
+AR(1) residuals, each is refitted, and the spread of those refits is the
+uncertainty. It comes out near 3°, about twenty times the naive figure. That
+interval is then carried through the dipole relation `tan(I) = 2 tan(λ)`.
 
 ![Bootstrap distribution](figures/06-bootstrap.png)
 
-## Results
-
-> **Note.** The survey CSVs are not committed to this repository yet. The
-> figures and numbers above come from `--synthetic`: simulated transects with a
-> known answer, used to validate the pipeline. On that data the analysis
-> recovers an inclination of **67.8°** against a true value of **68.0°**, and a
-> half-width of **0.170 m** against a true **0.170 m**, with a 95% interval of
-> 61.6–72.7° that brackets the truth. Re-run with `--data` once the CSVs are in
-> place to replace this section with the field result.
-
-## Reproducing it
+## Running it
 
 ```bash
-git clone https://github.com/lukektan917/basalt-dike-paleolatitude
-cd basalt-dike-paleolatitude
 pip install -r requirements.txt
 
-python -m dike.run --synthetic --out figures     # no field data required
-python -m dike.run --data data/high_50cm         # with the survey CSVs
-pytest                                           # 37 tests
+python -m dike.run --data data/high_50cm     # the field data, included
+python -m dike.run --synthetic               # simulated data with a known answer
+pytest                                       # 39 tests
 ```
 
-The notebook in `notebooks/` walks through the same analysis with commentary.
+`notebooks/analysis.ipynb` walks through the same analysis with commentary.
 
-## What this repository does differently from the original notebook
+## Checking that the pipeline is right
 
-This started as a course project written in Colab. Three things changed in the
-move, and they changed the answer, not just the tidiness:
+There is no independent measurement of this dike to check against, so
+correctness is established on simulated transects instead: a known dike, a known
+inclination, correlated noise, and a different unknown offset on every run.
+`python -m dike.run --synthetic` recovers an inclination of 67.8° against a true
+68.0°, and a half-width of 0.170 m against a true 0.170 m, with the bootstrap
+interval bracketing the truth. `dike/synthetic.py` generates it.
 
-**A baseline term is now fitted.** The dike formula has no constant term, so
-handing it data at the wrong DC level does not produce a fit that is uniformly
-offset — it produces a fit that has tilted the balance between the symmetric and
-antisymmetric terms, which is to say it has biased the inclination. On synthetic
-data with a known answer, fitting without a baseline recovers 61.7° where the
-truth is 68.0°. Fitting with one recovers 67.8°. That is a six-degree error in
-the one number the project exists to measure, and it was invisible without a
-ground truth to check against.
+## Two things worth knowing about the fit
 
-**The fit is bounded and multi-start.** Negating the half-width, the depth, or
-the intensity can each be absorbed by moving the inclination 180°, so the
-parameterisation is degenerate and an unconstrained fit can settle in a mirror
-solution that reports a metre-wide dike and a meaningless angle while still
-showing a respectable R². The original avoided this with a hand-tuned starting
-guess. Bounds that keep the geometry physical, plus several starting
-inclinations, make it robust instead of lucky.
+**The parameterisation is degenerate, and the degeneracy flips the answer.**
+A sensor at height *+z* above a dike inclined *−φ* produces exactly the same
+profile as a sensor at *−z* above a dike inclined *+φ* — not approximately, but
+to machine precision. An unconstrained fit will happily return a negative sensor
+height, which reads as a perfectly good fit while silently reversing the sign of
+the inclination. `fit_dike` therefore bounds the geometry to stay physical:
+positive depth, positive half-width, the dike centre inside the surveyed window,
+and the half-width no wider than the ground actually walked.
 
-**The inclination is converted to a paleolatitude.** The original stopped at the
-fitted angle. The angle is not the answer to the question the project asks; the
-latitude is.
+**The background level is not always identifiable.** The dike formula has no
+constant term. When a traverse extends far enough past the dike that the profile
+flattens on both sides, the background is pinned by those flanks and fitting it
+removes a real bias — on simulated data, omitting it costs about six degrees.
+When the traverse does not extend that far, as here, the background trades off
+against the anomaly's own width and amplitude and the fit slides the dike centre
+to the edge of the window. So `fit_baseline` is off by default, and the
+alignment step sets the level instead.
 
-The distance calibration was also rewritten to normalise by observed elapsed
-time rather than by a nominal sample count, which gives the same answer for
-these files and the right answer for any others.
+## Data quality
 
-## Layout
+The survey has problems that the fit cannot see, so `dike.diagnostics` checks
+for them directly: whether the background field magnitude is near the local
+geomagnetic field, and whether the field direction agrees between the two ends
+of a traverse — both ends sample the same ambient field, so it should.
 
-```
-src/dike/
-  io.py          loading and time → distance calibration
-  align.py       cropping and vertical alignment of repeated runs
-  model.py       the forward model, the bounded fit, the dipole equation
-  bootstrap.py   AR(1) residual model and the parametric bootstrap
-  plots.py       figures
-  synthetic.py   simulated transects with a known answer
-  run.py         CLI: regenerate every figure
-tests/           37 tests, including end-to-end parameter recovery
-notebooks/       narrative walkthrough
-```
+![Data quality checks](figures/00-diagnostics.png)
+
+Runs 1–3 read a plausible ambient field but show 90–118° of direction change
+across the traverse. Runs 4–10 hold their orientation but read four to nine
+times the Earth's field. A constant sensor offset shifts `Bz` by a constant and
+is removed by the alignment step, so the second failure is largely survivable;
+the first is a real limit on how much the direction information can be trusted.
+Dropping the glitched run 4 moves the inclination by 0.3°.
 
 ## Caveats
 
-* **One dike records an instant, not an average.** The dipole equation assumes
-  the field, averaged over enough time, is that of a geocentric axial dipole.
-  A single intrusion does not average out secular variation, so the latitude
-  here is a point estimate from a single sample of the field, not a
-  paleomagnetic pole.
-* **The bootstrap covers fit uncertainty, not every error.** It propagates the
-  residual process through the fit. It does not capture error in the distance
-  calibration, in the assumption that the dike is two-dimensional and
-  vertically sided, or in the alignment step.
-* **A phone magnetometer is not a survey instrument.** Its absolute calibration
-  is unknown, which is why intensity is reported in raw units and only the
-  *direction* is interpreted.
+* **The hemisphere is not determined here.** A phone's +z axis points out of the
+  screen, while geophysics takes +z as down. Which convention applies to these
+  files is not recorded in them, and it flips the sign of the inclination. The
+  magnitude is what the data constrains.
+* **One dike records an instant, not an average.** The dipole relation assumes
+  the field averaged over enough time. A single intrusion does not average out
+  secular variation, so this is a point estimate from one sample of the field.
+* **The bootstrap covers fit uncertainty, not every error.** It says nothing
+  about error in the distance calibration, or in the assumption that the dike is
+  two-dimensional and vertically sided.
+* **A phone magnetometer has unknown absolute calibration**, which is why only
+  the direction is interpreted and never the intensity.
+
+## Scope
+
+This covers the upper dike at the 50 cm transect, where ten repeat runs were
+recorded — my portion of a larger group survey that also covered a lower dike
+and further transects along strike.
 
 ## Notes on authorship
 
 The transect-alignment helpers and parts of the bootstrap loop were drafted with
 AI assistance and then checked against hand-worked cases. The experimental
-design, the physical model, the diagnosis of the baseline bias, and the
-interpretation are my own.
+design, the physical model, and the interpretation are my own.
 
-Field data collected September 2025. Analysis originally submitted as a final
-project for an Earth science course at Harvard, December 2025.
+Field data collected September 2025, Middlesex Fells, Massachusetts.
