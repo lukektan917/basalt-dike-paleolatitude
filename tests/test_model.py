@@ -122,7 +122,7 @@ def test_baseline_is_recovered():
     x = np.linspace(0.15, 0.70, 800)
     y = bz_dike(x, **truth, baseline=12.5)
 
-    fit = fit_dike(x, y)
+    fit = fit_dike(x, y, fit_baseline=True)
 
     assert fit.baseline == pytest.approx(12.5, abs=0.5)
     assert fit.inclination == pytest.approx(truth["inclination"], abs=1.0)
@@ -146,11 +146,35 @@ def test_a_wrong_dc_level_biases_the_inclination_without_a_baseline_term():
     x = np.linspace(0.15, 0.70, 800)
     y = bz_dike(x, **truth) + 8.0
 
-    fixed_baseline = default_bounds(x)
-    fixed_baseline[0][5] = 0.0
-    fixed_baseline[1][5] = 1e-9
-    without = fit_dike(x, y, bounds=fixed_baseline)
-    with_baseline = fit_dike(x, y)
+    without = fit_dike(x, y, fit_baseline=False)
+    with_baseline = fit_dike(x, y, fit_baseline=True)
 
     assert abs(without.inclination - truth["inclination"]) > 2.0
     assert with_baseline.inclination == pytest.approx(truth["inclination"], abs=1.0)
+
+
+def test_negative_depth_is_the_mirror_of_a_flipped_inclination():
+    """The degeneracy that reverses a hemisphere.
+
+    A sensor at height +z over a dike inclined -phi records exactly the profile
+    that a sensor at -z over a dike inclined +phi would. The data cannot tell
+    them apart; only the fact that the instrument was above ground can. This is
+    why :func:`default_bounds` forbids negative depth.
+    """
+    x = np.linspace(0.15, 0.70, 400)
+    physical = bz_dike(x, 0.285, +0.0257, 0.229, -77.9, 12.3)
+    mirrored = bz_dike(x, 0.285, -0.0257, 0.229, +77.9, 12.3)
+
+    assert np.allclose(physical, mirrored, atol=1e-12)
+    assert paleolatitude_from_inclination(-77.9) == pytest.approx(
+        -paleolatitude_from_inclination(77.9)
+    )
+
+
+def test_bounds_keep_the_source_inside_the_surveyed_window():
+    x = np.linspace(0.15, 0.70, 100)
+    lower, upper = default_bounds(x)
+    assert lower[0] == pytest.approx(0.15)
+    assert upper[0] == pytest.approx(0.70)
+    assert lower[1] > 0.0          # depth strictly positive
+    assert upper[2] <= 0.70 - 0.15 + 1e-9   # half-width no wider than the transect

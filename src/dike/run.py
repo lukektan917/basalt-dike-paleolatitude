@@ -18,6 +18,7 @@ import numpy as np  # noqa: E402
 
 from . import align, io, plots  # noqa: E402
 from .bootstrap import bootstrap_inclination, fit_ar1  # noqa: E402
+from .diagnostics import diagnose, frame_consistency_figure, report  # noqa: E402
 from .model import fit_dike  # noqa: E402
 from .synthetic import TRUE_PARAMETERS, synthetic_transects  # noqa: E402
 
@@ -34,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crop-start", type=float, default=0.15)
     parser.add_argument("--crop-end", type=float, default=0.70)
     parser.add_argument("--n-boot", type=int, default=2000)
+    parser.add_argument(
+        "--fit-baseline",
+        action="store_true",
+        help="fit the background level as a free parameter; only valid when the "
+        "traverse extends past the dike on both sides (see dike.model.fit_dike)",
+    )
     parser.add_argument("--seed", type=int, default=0)
     return parser
 
@@ -48,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  true inclination = {TRUE_PARAMETERS['inclination']:.1f} deg")
         raw = synthetic_transects(seed=args.seed)
         transects = [io.calibrate_distance(df) for df in raw]
+        args.fit_baseline = True  # the simulated traverse spans the full anomaly
     else:
         transects = io.load_transects(args.data)
         print(f"Loaded {len(transects)} transects from {args.data}")
@@ -57,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
         fig.tight_layout()
         fig.savefig(args.out / name, bbox_inches="tight")
         plt.close(fig)
+
+    if not args.synthetic:
+        checks = diagnose(transects)
+        print("\nFrame and calibration checks:")
+        print(report(checks))
+        axes = frame_consistency_figure(checks)
+        save(axes[0], "00-diagnostics.png")
 
     save(plots.transect_overlay(transects, subtitle="Raw, before alignment."), "01-raw.png")
     save(plots.transect_grid(transects), "02-runs.png")
@@ -75,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     x, y = align.pool(aligned)
-    fit = fit_dike(x, y)
+    fit = fit_dike(x, y, fit_baseline=args.fit_baseline)
     print("\nFit to pooled transects:")
     print(fit)
 
@@ -89,7 +104,12 @@ def main(argv: list[str] | None = None) -> int:
     n_grid = int(np.median([len(df) for df in aligned]))
     x_grid = np.linspace(x.min(), x.max(), n_grid)
     result = bootstrap_inclination(
-        x_grid, fit.params, ar_model, n_boot=args.n_boot, seed=args.seed
+        x_grid,
+        fit.params,
+        ar_model,
+        n_boot=args.n_boot,
+        seed=args.seed,
+        fit_baseline=args.fit_baseline,
     )
     print("\n" + result.summary())
 

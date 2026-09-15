@@ -95,6 +95,7 @@ def bootstrap_inclination(
     ar_model,
     n_boot: int = 2000,
     seed: int | None = 0,
+    fit_baseline: bool = False,
 ) -> BootstrapResult:
     """Parametric bootstrap of the dike fit under an AR(1) residual process.
 
@@ -106,6 +107,14 @@ def bootstrap_inclination(
     ``x_grid`` should have about as many points as a single real transect. Using
     a far denser grid would understate the uncertainty, because it would imply
     more independent information than the survey actually collected.
+
+    ``fit_baseline`` must match the setting used for the observed fit, or the
+    replicates are being fitted with a different model than the estimate they
+    are meant to describe.
+
+    Each replicate is fitted from the observed parameters without multi-start.
+    That is safe here only because the bounds exclude the mirror solutions; a
+    replicate cannot quietly land in a flipped-sign basin and skew the interval.
     """
     x_grid = np.asarray(x_grid, dtype=float)
     observed_params = np.asarray(observed_params, dtype=float)
@@ -121,7 +130,13 @@ def bootstrap_inclination(
             **{seed_keyword: int(rng.integers(0, 2**31 - 1))},
         )
         try:
-            fit = fit_dike(x_grid, baseline + np.asarray(simulated), p0=tuple(observed_params))
+            fit = fit_dike(
+                x_grid,
+                baseline + np.asarray(simulated),
+                p0=tuple(observed_params),
+                fit_baseline=fit_baseline,
+                restarts=False,
+            )
         except RuntimeError:
             continue
         replicates.append(fit.params)

@@ -21,7 +21,10 @@ def pipeline():
     transects = [calibrate_distance(df) for df in raw]
     aligned, _ = align_transects(transects, 0.15, 0.70, at="middle", strategy="reference")
     x, y = pool(aligned)
-    return x, y, fit_dike(x, y)
+    # The synthetic traverse extends past the dike on both sides, so the
+    # background is identified and the baseline should be fitted. See
+    # dike.model.fit_dike for when that is and is not true.
+    return x, y, fit_dike(x, y, fit_baseline=True)
 
 
 def test_pipeline_recovers_the_true_inclination(pipeline):
@@ -45,7 +48,9 @@ def test_bootstrap_interval_brackets_the_truth(pipeline):
     x, _, fit = pipeline
     ar_model = fit_ar1(_bootstrap_residuals(pipeline))
     x_grid = np.linspace(x.min(), x.max(), 400)
-    result = bootstrap_inclination(x_grid, fit.params, ar_model, n_boot=60, seed=3)
+    result = bootstrap_inclination(
+        x_grid, fit.params, ar_model, n_boot=60, seed=3, fit_baseline=True
+    )
 
     lo, hi = result.interval(result.inclination)
     assert lo < TRUE_PARAMETERS["inclination"] < hi
@@ -59,7 +64,9 @@ def test_bootstrap_interval_is_wider_than_naive_errors(pipeline):
 
     ar_model = fit_ar1(_bootstrap_residuals(pipeline))
     x_grid = np.linspace(x.min(), x.max(), 400)
-    result = bootstrap_inclination(x_grid, fit.params, ar_model, n_boot=60, seed=3)
+    result = bootstrap_inclination(
+        x_grid, fit.params, ar_model, n_boot=60, seed=3, fit_baseline=True
+    )
 
     assert result.inclination.std(ddof=1) > naive_sd
 
