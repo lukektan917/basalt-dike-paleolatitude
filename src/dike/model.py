@@ -1,48 +1,17 @@
 """Forward model for the magnetic anomaly over a two-dimensional dike.
 
-The dike is idealised as an infinitely long, vertically-sided tabular body of
-half-width ``half_width``, buried at depth ``depth`` below the sensor, carrying a
-uniform magnetisation of intensity ``intensity`` whose direction makes an angle
-``inclination`` with the horizontal in the plane of the profile.
+An infinitely long, vertically-sided tabular body of half-width ``half_width``
+at depth ``depth`` below the sensor, uniformly magnetised at ``inclination``
+degrees from horizontal. Closed form as in Telford, Geldart & Sheriff, *Applied
+Geophysics*, 2nd ed., ch. 3: a symmetric pair of arctangent terms scaled by
+``sin(inclination)``, and an antisymmetric logarithmic term scaled by
+``cos(inclination)``. Their ratio is what fixes the inclination.
 
-For such a body the vertical component of the anomalous field along a profile
-running perpendicular to strike has the closed form used in ``bz_dike`` below
-(see e.g. Telford, Geldart & Sheriff, *Applied Geophysics*, 2nd ed., ch. 3).
-Two terms carry the signature that lets us recover the magnetisation direction:
-
-* a pair of **arctangent** terms, *symmetric* about the dike centre, scaled by
-  ``sin(inclination)``. A vertically magnetised dike produces a symmetric peak.
-* a **logarithmic** term, *antisymmetric* about the centre, scaled by
-  ``cos(inclination)``. A horizontally magnetised dike produces a profile that
-  rises on one flank and falls on the other.
-
-The ratio of the symmetric to the antisymmetric part of an observed profile is
-therefore what constrains the inclination, and that is the quantity the whole
-analysis exists to estimate.
-
-**On the baseline term.** A magnetometer transect does not measure the anomaly;
-it measures the anomaly sitting on top of the ambient regional field plus
-whatever constant the instrument contributes. The dike formula alone has no
-constant term, so if the data are handed to it with the wrong DC level the fit
-cannot absorb the error in a baseline — it absorbs it by tilting the balance
-between the symmetric and antisymmetric terms, which is to say *by biasing the
-inclination*, which is the one number the analysis is trying to recover. On
-synthetic transects with a known answer, fitting without a baseline term
-recovers 61.7 degrees where the truth is 68.0; fitting with one recovers 67.5.
-``baseline`` is therefore a fitted parameter here, and the alignment step in
-:mod:`dike.align` only has to get the runs approximately onto a common level
-rather than exactly onto the right one.
-
-**On identifiability.** Written naively the parameterisation is degenerate:
-negating ``half_width`` or ``depth``, or flipping the sign of ``intensity``, can
-each be absorbed by moving ``inclination`` by 180 degrees, so an unconstrained
-least-squares fit will happily wander into a mirror solution that fits equally
-well and means nothing. :func:`fit_dike` therefore fits under bounds that keep
-the geometry physical (positive depth, positive half-width, positive intensity,
-inclination in [-90, 90]), which makes the remaining map one-to-one. This is
-the single most important difference between this implementation and a direct
-transcription of the exploratory notebook, which relied on a hand-tuned starting
-guess to stay in the right basin.
+The parameterisation is degenerate. Negating ``depth``, ``half_width`` or
+``intensity`` can each be absorbed by moving ``inclination``, so an
+unconstrained fit can return a sensor height below ground and a sign-flipped
+inclination while fitting just as well. :func:`fit_dike` bounds the geometry to
+stay physical.
 """
 
 from __future__ import annotations
@@ -93,10 +62,8 @@ def bz_dike(
     intensity
         Magnetisation intensity, in the units of the input field (here uT).
     baseline
-        Constant background level, in the units of the input field. Defaults to
-        zero so the pure anomaly can be evaluated, but it is a *fitted*
-        parameter in :func:`fit_dike` — see the module docstring for why that
-        matters.
+        Constant background level, in the units of the input field. Off by
+        default in :func:`fit_dike`; see ``fit_baseline`` there.
 
     Returns
     -------

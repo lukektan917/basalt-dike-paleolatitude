@@ -1,18 +1,9 @@
 """Figures for the dike analysis.
 
-A note on the visual choices, because they are analytical choices in disguise.
-
-The ten transects are **repeated measurements of one thing**, not ten different
-categories. Giving each its own hue and a ten-entry legend — as the exploratory
-notebook did — invites the reader to compare transect 3 against transect 7, which
-is not a comparison anyone wants to make. Drawing them instead as one thin grey
-family puts the eye where it belongs: on the spread of the replicates and on the
-single fitted curve running through them. Where a per-run comparison genuinely is
-the point, :func:`transect_grid` breaks them into small multiples, which is the
-readable way to show ten of anything.
-
-Colour carries exactly one job here: the model, and the interval around it,
-against recessive grey data.
+The ten transects are repeated measurements of one thing, not ten categories,
+so they are drawn as one grey family with the fitted curve over them rather
+than ten colours and a ten-entry legend. :func:`transect_grid` gives small
+multiples where a per-run comparison is wanted.
 """
 
 from __future__ import annotations

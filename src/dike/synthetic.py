@@ -1,13 +1,9 @@
-"""Synthetic transects, so the pipeline runs without the field data.
+"""Synthetic transects, so the pipeline can be checked against a known answer.
 
-The raw survey CSVs are not redistributed with this repository. Everything in
-:mod:`dike` therefore has to be exercisable against data generated here: a known
-dike, a known magnetisation, correlated noise, and a different unknown baseline
-offset on every run — the same three nuisances the real analysis has to survive.
-
-Because the true parameters are known, this module doubles as the correctness
-check for the whole pipeline: run the analysis on synthetic data and the fitted
-inclination should come back close to the value that went in.
+A known dike, a known magnetisation, correlated noise, and a different unknown
+baseline offset on every run — the same three nuisances the real analysis has
+to survive. Because the true parameters are known, this is the correctness
+check for the whole pipeline.
 """
 
 from __future__ import annotations

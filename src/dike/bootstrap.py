@@ -1,19 +1,16 @@
-"""Uncertainty on the fitted inclination, accounting for correlated residuals.
+"""Uncertainty on the fitted inclination, with correlated residuals.
 
-The naive standard errors that come out of ``scipy.optimize.curve_fit`` assume
-independent, identically distributed errors. Along a magnetometer transect that
-assumption is badly wrong: consecutive samples are a hundredth of a second and a
-few millimetres apart, and the residual from the smooth dike model is dominated
-by real, spatially coherent structure — small-scale heterogeneity in the
-outcrop, the operator's hand wobbling, the phone's own drift. Fitting an AR(1)
-model to the pooled residuals of this survey returns an autoregressive
-coefficient near 0.99.
+``curve_fit`` assumes independent errors. Along a magnetometer transect
+consecutive samples are a hundredth of a second and a few millimetres apart,
+and the residual from the smooth model is dominated by coherent structure —
+outcrop heterogeneity, hand wobble, sensor drift. AR(1) fitted to the pooled
+residuals of this survey returns a coefficient near 0.99, so the effective
+sample size is a small fraction of the nominal one and i.i.d. standard errors
+are optimistic by roughly an order of magnitude.
 
-With correlation that strong the *effective* sample size is a tiny fraction of
-the nominal one, and i.i.d. standard errors are optimistic by roughly an order
-of magnitude. The honest route is a parametric bootstrap: model the residual
-process, simulate new profiles from the fitted dike plus simulated residuals,
-refit each one, and read the spread of the refitted parameters.
+The parametric bootstrap here models the residual process, simulates new
+profiles from the fitted curve plus simulated residuals, refits each, and reads
+the spread.
 """
 
 from __future__ import annotations

@@ -1,9 +1,8 @@
 """Loading magnetometer transects and converting sample time into distance.
 
-The field data are phone-magnetometer CSVs, one file per walked transect, with a
-``time`` column in seconds and the three field components ``Bx``, ``By``, ``Bz``.
-The phone records time, not position, so the first job is to turn one into the
-other.
+One CSV per walked transect, with a ``time`` column in seconds and the three
+field components. The phone records time, not position, so the first job is to
+turn one into the other.
 """
 
 from __future__ import annotations

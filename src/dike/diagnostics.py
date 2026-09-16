@@ -1,23 +1,14 @@
 """Checks that have to pass before a fitted inclination means anything.
 
-The dike model is fitted to ``Bz``, and it interprets ``Bz`` as the *vertical*
-component of the field. That interpretation rests on two assumptions about how
-the data was collected, neither of which the fit itself can verify:
+The model reads ``Bz`` as the vertical component of the field, which assumes
+the phone held a fixed orientation and was measuring the ambient field. Neither
+is verifiable from the fit, and both can fail while R-squared exceeds 0.99:
 
-1. **The sensor frame is the Earth frame.** A phone reports its field components
-   in the phone's own frame. If the phone is not held in a fixed orientation,
-   ``Bz`` is some varying projection of the field rather than its vertical part,
-   and the symmetric/antisymmetric balance that the inclination is read from is
-   corrupted by the rotation.
-2. **The sensor is measuring the ambient field.** The magnitude ``|B|`` away
-   from the dike should be near the local geomagnetic field strength, about
-   50 uT in New England. A background magnitude far from that means a large
-   instrument bias or a nearby magnetic object, and a bias *vector* does not
-   subtract out of ``|B|`` the way it subtracts out of a single component.
-
-A fit can return R-squared above 0.99 while both assumptions are violated, so
-these checks are not optional. :func:`diagnose` runs them and
-:func:`frame_consistency_figure` draws the result.
+1. A phone reports components in its own frame. If it rotates, ``Bz`` is a
+   varying projection and the symmetric/antisymmetric balance is corrupted.
+2. ``|B|`` away from the dike should be near the local field, about 50 uT in
+   New England. Far from that means a large instrument bias, and a bias vector
+   does not subtract out of ``|B|`` the way it does out of one component.
 """
 
 from __future__ import annotations

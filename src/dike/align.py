@@ -1,20 +1,13 @@
 """Cropping and vertically aligning repeated transects.
 
-Ten transects were walked over the same dike. They cannot simply be averaged,
-for two reasons:
+Repeated runs over the same dike cannot simply be pooled. Each carries an
+unknown DC offset — ambient field plus whatever the phone contributes in the
+orientation it was held — and the first and last samples of each run are
+contaminated by starting and stopping. So: crop the ends, then shift each run
+onto a common level.
 
-1. **Each run carries an unknown DC offset.** A phone magnetometer measures the
-   total field, including the ambient regional field and whatever hard-iron
-   contribution the phone itself makes in the orientation it happens to be held.
-   That baseline differs from run to run, so the profiles are separated
-   vertically by amounts that mean nothing geologically.
-2. **The ends of each run are unreliable.** The operator starts and stops
-   walking at the pegs, so the first and last samples are contaminated by the
-   acceleration and deceleration, and by the hand moving the phone into place.
-
-The fix is to crop the ends and then shift each profile onto a common baseline.
-*Which* baseline is a real analytical choice, not a detail — see
-:func:`align_transects` for the options and what each one assumes.
+Which level is a real analytical choice, not a detail; see
+:func:`align_transects`.
 """
 
 from __future__ import annotations
