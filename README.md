@@ -19,14 +19,15 @@ that respects how the measurement was actually made.
 | | |
 |---|---|
 | Magnetic inclination | **77.9°** (95% CI 69.8 – 85.2°) |
-| Paleolatitude | **66.8°** (95% CI 53.6 – 80.4°) |
+| Implied paleolatitude | **66.8°** (95% CI 53.6 – 80.4°) |
 | Dike half-width | 0.229 m |
 | Sensor height above the dike | 0.026 m |
 | R² | 0.935 |
 
 Reported as magnitudes. The sign of the inclination — and so which hemisphere
 the dike cooled in — depends on the sensor's z-axis convention, which these
-files do not record; see [Caveats](#caveats).
+files do not record. The implied paleolatitude should be read as what the model
+gives, not as a claim about where the rock was; see [Caveats](#caveats).
 
 ## The measurement
 
@@ -133,6 +134,15 @@ Dropping the glitched run 4 moves the inclination by 0.3°.
   screen, while geophysics takes +z as down. Which convention applies to these
   files is not recorded in them, and it flips the sign of the inclination. The
   magnitude is what the data constrains.
+* **This cannot separate remanent from induced magnetisation.** An in-situ
+  survey measures the sum of two things: the ancient remanence locked in when
+  the rock cooled, and the magnetisation induced in it by today's field.
+  Separating them needs oriented samples and stepwise demagnetisation in a
+  laboratory. The fitted inclination of 77.9° sits closer to the present-day
+  field inclination at this site — roughly 66° — than to the paleolatitude that
+  published reconstructions give for eastern Massachusetts at any plausible age
+  for this dike. The honest reading is that this measures a magnetisation
+  direction, and that the induced part is likely to dominate.
 * **One dike records an instant, not an average.** The dipole relation assumes
   the field averaged over enough time. A single intrusion does not average out
   secular variation, so this is a point estimate from one sample of the field.
